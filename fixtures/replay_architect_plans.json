@@ -1,0 +1,97 @@
+{
+  "nhanes": {
+    "declared_roles": {
+      "log_crp_z": "exposure",
+      "age_years": "confounder",
+      "sex_male": "confounder",
+      "bmi": "confounder",
+      "sbp_mmhg": "confounder",
+      "total_chol_mg_dl": "confounder",
+      "hdl_chol_mg_dl": "confounder",
+      "smoking_ever": "confounder",
+      "prevalent_cvd": "comorbidity_flag",
+      "prevalent_cancer": "comorbidity_flag",
+      "diabetes_dx": "comorbidity_flag",
+      "hospitalized_past_year": "collider"
+    },
+    "age_floors": [40],
+    "cohort_definitions": [
+      "all_eligible",
+      "exclude_prevalent_cvd",
+      "super_controls_clean"
+    ],
+    "washout_months": [0, 12],
+    "followup_horizons_months": [null],
+    "missingness_strategies": [
+      "complete_case",
+      "median_indicator",
+      "reg_imputation"
+    ],
+    "adjustment_sets": {
+      "minimal": ["age_years", "sex_male"],
+      "clinical": [
+        "age_years",
+        "bmi",
+        "hdl_chol_mg_dl",
+        "sbp_mmhg",
+        "sex_male",
+        "smoking_ever",
+        "total_chol_mg_dl"
+      ]
+    },
+    "estimators": [
+      "cox_breslow",
+      "cox_spline",
+      "piecewise_exponential"
+    ],
+    "rationale": "Pre-specified 108-branch proportional-hazards multiverse over baseline confounders, landmark washout (0m vs 12m), control cleanliness, missingness handling, and estimator family using solely baseline schema metadata."
+  },
+  "synthetic": {
+    "declared_roles": {
+      "log_crp_z": "exposure",
+      "age_years": "confounder",
+      "sex_male": "confounder",
+      "bmi": "confounder",
+      "sbp_mmhg": "confounder",
+      "total_chol_mg_dl": "confounder",
+      "hdl_chol_mg_dl": "confounder",
+      "smoking_ever": "confounder",
+      "prevalent_cvd": "comorbidity_flag",
+      "prevalent_cancer": "comorbidity_flag",
+      "diabetes_dx": "comorbidity_flag",
+      "hospitalized_past_year": "collider",
+      "post_tx_statin": "mediator"
+    },
+    "age_floors": [20],
+    "cohort_definitions": [
+      "all_eligible",
+      "exclude_prevalent_cvd",
+      "super_controls_clean"
+    ],
+    "washout_months": [0, 12],
+    "followup_horizons_months": [null],
+    "missingness_strategies": [
+      "complete_case",
+      "median_indicator",
+      "reg_imputation"
+    ],
+    "adjustment_sets": {
+      "minimal": ["age_years", "sex_male"],
+      "clinical": [
+        "age_years",
+        "bmi",
+        "hdl_chol_mg_dl",
+        "sbp_mmhg",
+        "sex_male",
+        "smoking_ever",
+        "total_chol_mg_dl"
+      ]
+    },
+    "estimators": [
+      "cox_breslow",
+      "cox_spline",
+      "piecewise_exponential"
+    ],
+    "rationale": "Pre-specified synthetic calibration grid probing acute reverse-causation washout, control-group strictness, missingness handling, and proportional-hazards model alignment without adjusting for post-baseline mediators or utilization colliders."
+  }
+}
