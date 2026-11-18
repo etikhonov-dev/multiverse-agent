@@ -90,71 +90,43 @@ def _harrell_concordance_index(
     predicted_survival_scores: NDArray[np.float64],
     events: NDArray[np.int64],
 ) -> float:
-    """Compute exact Harrell's C-index in O(N log N) via a Fenwick tree."""
+    """Compute exact Harrell's C-index via vectorized chunked NumPy comparisons."""
     n = len(event_times)
     if n < 2 or int(np.sum(events)) == 0:
         return 0.5
 
-    _, ranks_zero = np.unique(predicted_survival_scores, return_inverse=True)
-    ranks = ranks_zero + 1
-    max_rank = int(ranks.max())
-    tree = np.zeros(max_rank + 1, dtype=np.int64)
+    order = np.argsort(event_times, kind="mergesort")
+    t_sorted = event_times[order]
+    s_sorted = predicted_survival_scores[order]
+    e_sorted = events[order]
 
-    def _add(idx: int) -> None:
-        while idx <= max_rank:
-            tree[idx] += 1
-            idx += idx & -idx
+    ev_pos = np.flatnonzero(e_sorted == 1)
+    if ev_pos.size == 0:
+        return 0.5
 
-    def _prefix_sum(idx: int) -> int:
-        total = 0
-        while idx > 0:
-            total += int(tree[idx])
-            idx -= idx & -idx
-        return total
-
-    # Process descending by time; at tied times process censored (0) before events (1)
-    order = np.lexsort((events, -event_times))
-    total_inserted = 0
+    e0_sorted = e_sorted == 0
+    concordant = 0
+    tied = 0
     total_pairs = 0
-    concordant_twice = 0
+    chunk = 256
 
-    pos = 0
-    while pos < n:
-        t_curr = float(event_times[order[pos]])
-        end = pos + 1
-        while end < n and float(event_times[order[end]]) == t_curr:
-            end += 1
+    for start in range(0, ev_pos.size, chunk):
+        sl = ev_pos[start : start + chunk]
+        t_ev = t_sorted[sl, None]
+        s_ev = s_sorted[sl, None]
+        first_idx = int(np.searchsorted(t_sorted, float(t_ev[0, 0]), side="left"))
+        t_sub = t_sorted[None, first_idx:]
+        s_sub = s_sorted[None, first_idx:]
+        e0_sub = e0_sorted[None, first_idx:]
 
-        # Insert all censored subjects at t_curr first
-        event_positions: list[int] = []
-        for idx_pos in range(pos, end):
-            row = int(order[idx_pos])
-            if events[row] == 0:
-                _add(int(ranks[row]))
-                total_inserted += 1
-            else:
-                event_positions.append(row)
-
-        # Query all events at t_curr against strictly later times or tied censored
-        for row in event_positions:
-            r = int(ranks[row])
-            le_count = _prefix_sum(r)
-            lt_count = _prefix_sum(r - 1)
-            gt_count = total_inserted - le_count
-            eq_count = le_count - lt_count
-            total_pairs += total_inserted
-            concordant_twice += 2 * gt_count + eq_count
-
-        # Insert event subjects at t_curr after querying so tied events aren't paired
-        for row in event_positions:
-            _add(int(ranks[row]))
-            total_inserted += 1
-
-        pos = end
+        comp = (t_sub > t_ev) | ((t_sub == t_ev) & e0_sub)
+        concordant += int(np.count_nonzero(comp & (s_sub > s_ev)))
+        tied += int(np.count_nonzero(comp & (s_sub == s_ev)))
+        total_pairs += int(np.count_nonzero(comp))
 
     if total_pairs == 0:
         return 0.5
-    return float(concordant_twice) / float(2 * total_pairs)
+    return float(concordant + 0.5 * tied) / float(total_pairs)
 
 
 def _standardize_covariates(x_risk: NDArray[np.float64]) -> NDArray[np.float64]:
@@ -315,7 +287,7 @@ def _fit_lifelines_cox(
     fit_kwargs: dict[str, Any] = {}
     if method == "spline":
         kwargs["n_baseline_knots"] = 3
-        fit_kwargs["fit_options"] = {"ftol": 1e-6}
+        fit_kwargs["fit_options"] = {"ftol": 1e-5}
         try:
             beta_init, _ = _solve_piecewise_beta(x_work, t_risk, e_risk)
             rate0 = math.log(max(1e-6, float(np.sum(e_risk)) / float(np.sum(t_scaled))))
