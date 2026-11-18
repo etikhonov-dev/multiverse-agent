@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality-and-tests:
+    runs-on: ubuntu-latest
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.x"
+
+      - name: Set up Python 3.12 and sync environment
+        run: |
+          uv python install 3.12
+          uv sync --all-extras --frozen
+
+      - name: Enforce CONSTRAINTS.md floor guard
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            python3 scripts/floor_guard.py --base "origin/$BASE_REF"
+          else
+            python3 scripts/floor_guard.py --base HEAD~1
+          fi
+
+      - name: Lint and format check (ruff + bandit S rules)
+        run: |
+          uv run ruff check src tests scripts
+          uv run ruff format --check src tests scripts
+
+      - name: Strict static type check (mypy --strict)
+        run: uv run mypy --strict src
+
+      - name: Dependency vulnerability audit (pip-audit)
+        run: uv run pip-audit
+
+      - name: Run full test suite with >=90% coverage floor
+        run: uv run pytest --cov=multiverse_agent --cov-fail-under=90
+
+      - name: Smoke test 108-branch NHANES CLI run & verification (<12s budget)
+        run: |
+          uv run multiverse-agent run --cohort nhanes --backend replay --out /tmp/ci-nhanes
+          uv run multiverse-agent verify \
+            --runs /tmp/ci-nhanes/runs.jsonl \
+            --summary /tmp/ci-nhanes/curve_summary.json \
+            --report /tmp/ci-nhanes/report.md
