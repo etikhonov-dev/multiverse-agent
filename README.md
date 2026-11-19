@@ -89,3 +89,9 @@ docker build -t multiverse-agent .
 docker run --rm -v "$(pwd)/artifacts:/out" multiverse-agent \
   run --cohort nhanes --backend replay --out /out/nhanes
 ```
+
+---
+
+## License
+
+Source code is licensed under the [MIT License](LICENSE). Bundled CDC NHANES 2007–2010 and 2019 Linked Mortality source artifacts are in the U.S. public domain (see [`data/DATASETS.md`](data/DATASETS.md)).
