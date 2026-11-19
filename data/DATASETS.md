@@ -1,3 +1,18 @@
+# Cohort datasets
+
+## Sealed Tier-1 synthetic bias cohort
+
+- **Output file:** `data/synthetic_bias_n4000_seed42.parquet` (289,414 bytes)
+- **Output SHA-256:** `1fb51b6ffc102b4ab6d064bfd323307af9a2978476ab5d1ad3b4dbae3fdeddef`
+- **Rows:** `4,000` (`subject_id` unique, seed `42`)
+- **All-cause deaths (`event == 1`):** `1,533` (38.325%)
+- **Why sealed:** Regenerating the DGP on the fly is not bit-stable across macOS ARM vs Linux x86; CI loads this parquet (same pattern as NHANES) so `cohort_sha256` / `run_id`s match the Stage-2 replay fixture.
+- **Regenerate (only when intentionally changing the DGP):**
+  `uv run python -c "from pathlib import Path; from multiverse_agent.cohort import make_synthetic_bias_cohort; b=make_synthetic_bias_cohort(4000,42); p=Path('data/synthetic_bias_n4000_seed42.parquet'); b.df.to_parquet(p,index=False)"`
+  then update `SYNTHETIC_PARQUET_SHA256` in `src/multiverse_agent/cohort.py` and regenerate `fixtures/replay_synthesizer_reports.json`.
+
+---
+
 # CDC NHANES 2007-2010 + 2019 Linked Mortality Cohort
 
 ## Summary

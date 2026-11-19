@@ -13,7 +13,7 @@ from multiverse_agent.cohort import (
     CohortBundle,
     OutcomeBlindSchema,
     load_nhanes_mortality_cohort,
-    make_synthetic_bias_cohort,
+    load_synthetic_bias_cohort,
 )
 from multiverse_agent.curve import (
     SpecCurveSummary,
@@ -32,11 +32,12 @@ DEFAULT_HYPOTHESIS = (
 
 
 def _load_cohort(cohort_name: str, *, seed: int) -> CohortBundle:
+    _ = seed  # Runner seed only; sealed cohorts are not regenerated from --seed.
     key = cohort_name.strip().lower()
     if key == "nhanes":
         return load_nhanes_mortality_cohort()
     if key == "synthetic":
-        return make_synthetic_bias_cohort(n=4_000, seed=seed)
+        return load_synthetic_bias_cohort()
     raise ValueError(f"Unknown cohort '{cohort_name}'. Expected 'nhanes' or 'synthetic'.")
 
 

@@ -12,11 +12,13 @@ import pytest
 
 from multiverse_agent.cohort import (
     NHANES_PARQUET_SHA256,
+    SYNTHETIC_PARQUET_SHA256,
     CohortBundle,
     CollectionTiming,
     OutcomeBlindSchema,
     VariableRole,
     load_nhanes_mortality_cohort,
+    load_synthetic_bias_cohort,
     make_synthetic_bias_cohort,
 )
 
@@ -71,6 +73,49 @@ def test_tier1_synthetic_is_deterministic_and_validates_size() -> None:
 
     with pytest.raises(ValueError, match="n must be >= 200"):
         make_synthetic_bias_cohort(n=50, seed=42)
+
+
+def test_tier1_sealed_synthetic_loads_verified_cohort_fast() -> None:
+    """CLI / CI path must load the golden parquet, not regenerate the DGP."""
+    t0 = time.perf_counter()
+    bundle = load_synthetic_bias_cohort()
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+    assert elapsed_ms < 200.0
+    assert bundle.sha256 == SYNTHETIC_PARQUET_SHA256
+    assert bundle.name == "synthetic_bias_n4000_seed42"
+    assert len(bundle.df) == 4_000
+    assert int(bundle.df["event"].sum()) == 1_533
+    assert not bundle.df["subject_id"].duplicated().any()
+    assert (bundle.df["duration_months"] >= 0.5).all()
+    assert bundle.df["log_crp_z"].notna().all()
+    assert bundle.columns["post_tx_statin"].role == VariableRole.MEDIATOR
+    exp = bundle.df[bundle.exposure_col]
+    assert float(exp.mean()) == pytest.approx(0.0, abs=1e-6)
+    assert float(exp.std(ddof=0)) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_tier1_sealed_synthetic_validation_errors(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_synthetic_bias_cohort(parquet_path=tmp_path / "missing.parquet")
+
+    source = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "synthetic_bias_n4000_seed42.parquet"
+    )
+    copy = tmp_path / "tampered.parquet"
+    copy.write_bytes(source.read_bytes())
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        load_synthetic_bias_cohort(parquet_path=copy, expected_sha256="0" * 64)
+
+    bad_df = pd.read_parquet(source).head(5).copy()
+    bad_df["subject_id"] = 1
+    dup_path = tmp_path / "dup.parquet"
+    bad_df.to_parquet(dup_path, index=False)
+    with pytest.raises(ValueError, match="unique subject_id"):
+        load_synthetic_bias_cohort(parquet_path=dup_path, expected_sha256=None)
 
 
 def test_tier2_nhanes_loads_verified_real_cohort_fast() -> None:

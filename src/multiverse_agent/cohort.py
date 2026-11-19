@@ -19,6 +19,11 @@ NHANES_PARQUET_SHA256 = "e968d9a9752de372b27f1870cf325593ff07fbc81fab4a78a9f93a7
 DEFAULT_NHANES_PARQUET = (
     Path(__file__).resolve().parents[2] / "data" / "nhanes_2007_2010_mort.parquet"
 )
+SYNTHETIC_PARQUET_SHA256 = "1fb51b6ffc102b4ab6d064bfd323307af9a2978476ab5d1ad3b4dbae3fdeddef"
+DEFAULT_SYNTHETIC_PARQUET = (
+    Path(__file__).resolve().parents[2] / "data" / "synthetic_bias_n4000_seed42.parquet"
+)
+SYNTHETIC_COHORT_NAME = "synthetic_bias_n4000_seed42"
 REFUSAL_CODES = frozenset({7.0, 9.0, 77.0, 99.0, 777.0, 999.0})
 
 
@@ -479,4 +484,58 @@ def load_nhanes_mortality_cohort(
         df=df,
         columns=_base_provenance(include_mediator=False),
         id_col="SEQN",
+    )
+
+
+def load_synthetic_bias_cohort(
+    parquet_path: Path | None = None,
+    *,
+    expected_sha256: str | None = SYNTHETIC_PARQUET_SHA256,
+) -> CohortBundle:
+    """Load and verify the sealed Tier-1 synthetic bias cohort (n=4000, seed=42).
+
+    Cross-platform CI must not regenerate this DGP on the fly: float ULP drift in
+    Bernoulli draws changes dataframe bytes, run_ids, and replay fixture citations.
+    The golden parquet is the source of truth; ``make_synthetic_bias_cohort`` remains
+    for unit tests that intentionally use other ``n`` / ``seed`` values.
+    """
+    path = parquet_path if parquet_path is not None else DEFAULT_SYNTHETIC_PARQUET
+    if not path.exists():
+        raise FileNotFoundError(f"Synthetic cohort parquet not found at {path}")
+
+    actual_sha256 = _sha256_file(path)
+    if expected_sha256 is not None and actual_sha256 != expected_sha256:
+        raise ValueError(
+            f"Synthetic parquet SHA-256 mismatch: expected {expected_sha256}, got {actual_sha256}"
+        )
+
+    df = pq.read_table(path).to_pandas()
+    if "subject_id" not in df.columns or df["subject_id"].duplicated().any():
+        raise ValueError("Synthetic parquet must contain unique subject_id identifiers.")
+    if (df["duration_months"] < 0.5).any():
+        raise ValueError("All synthetic duration_months entries must be >= 0.5.")
+    if df["log_crp_z"].isna().any():
+        raise ValueError("Synthetic primary exposure log_crp_z must be fully observed.")
+
+    binary_cols = (
+        "sex_male",
+        "smoking_ever",
+        "prevalent_cvd",
+        "prevalent_cancer",
+        "diabetes_dx",
+        "post_tx_statin",
+        "hospitalized_past_year",
+        "event",
+    )
+    for col in binary_cols:
+        vals = {float(v) for v in df[col].dropna().unique().tolist()}
+        if not vals <= {0.0, 1.0}:
+            raise ValueError(f"Column {col} contains invalid binary values: {sorted(vals)}")
+
+    return CohortBundle(
+        name=SYNTHETIC_COHORT_NAME,
+        sha256=actual_sha256,
+        df=df,
+        columns=_base_provenance(include_mediator=True),
+        id_col="subject_id",
     )
