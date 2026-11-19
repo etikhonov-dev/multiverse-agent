@@ -99,11 +99,7 @@ def test_tier1_sealed_synthetic_validation_errors(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         load_synthetic_bias_cohort(parquet_path=tmp_path / "missing.parquet")
 
-    source = (
-        Path(__file__).resolve().parent.parent
-        / "data"
-        / "synthetic_bias_n4000_seed42.parquet"
-    )
+    source = Path(__file__).resolve().parent.parent / "data" / "synthetic_bias_n4000_seed42.parquet"
     copy = tmp_path / "tampered.parquet"
     copy.write_bytes(source.read_bytes())
 
