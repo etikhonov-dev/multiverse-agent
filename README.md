@@ -10,7 +10,7 @@
 
 ## Real Empirical Finding: CDC NHANES 2007–2010 + 2019 Linked Mortality
 
-We evaluate baseline serum C-reactive protein (`log_crp_z`, per 1-SD increment) and all-cause mortality across **11,055** US adults (**1,697** deaths over up to **159.0** follow-up months) across **108** conditional proportional-hazards specifications (`cox_breslow`, Royston-Parmar `cox_spline`, profiled Holford `piecewise_exponential`) in **< 9 seconds** on a single CPU core:
+We evaluate baseline serum C-reactive protein (`log_crp_z`, per 1-SD increment) and all-cause mortality across **11,055** US adults (**1,697** deaths over up to **159.0** follow-up months) across **108** conditional proportional-hazards specifications (`cox_breslow`, Royston-Parmar `cox_spline`, profiled Holford `piecewise_exponential`) in **< 9 seconds** on a developer CPU:
 
 ![NHANES CRP-Mortality Specification Curve](docs/figures/nhanes_spec_curve.svg)
 

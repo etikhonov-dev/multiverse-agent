@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import decimal
 import hashlib
 import math
 from dataclasses import dataclass
@@ -148,8 +149,40 @@ class CohortBundle:
         return float(self.df[self.duration_col].max())
 
 
+# libmpdec evaluates exp/sqrt identically on macOS and Linux. np.exp and np.sum do not:
+# libm and SIMD reduction width change float bytes, which desynchronizes later binomial draws.
+_PORTABLE_DECIMAL = decimal.Context(prec=40, rounding=decimal.ROUND_HALF_EVEN)
+
+
+def _portable_exp(values: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Evaluate exp elementwise with a platform-independent decimal implementation."""
+    array = np.asarray(values, dtype=np.float64)
+    flat = array.reshape(-1)
+    out = np.empty(flat.shape[0], dtype=np.float64)
+    ctx = _PORTABLE_DECIMAL
+    for index, value in enumerate(flat.tolist()):
+        if value > 709.0:
+            out[index] = math.inf
+        elif value < -745.0:
+            out[index] = 0.0
+        else:
+            out[index] = float(ctx.exp(decimal.Decimal(value)))
+    return out.reshape(array.shape)
+
+
+def _portable_mean_std(values: NDArray[np.float64]) -> tuple[float, float]:
+    """Population mean and std via math.fsum, independent of SIMD reduction width."""
+    flat = [float(item) for item in np.asarray(values, dtype=np.float64).reshape(-1)]
+    count = len(flat)
+    mean = math.fsum(flat) / count
+    variance = math.fsum((item - mean) * (item - mean) for item in flat) / count
+    std = float(_PORTABLE_DECIMAL.sqrt(decimal.Decimal(variance)))
+    return mean, std
+
+
 def _sigmoid(x: NDArray[np.float64]) -> NDArray[np.float64]:
-    return np.asarray(1.0 / (1.0 + np.exp(-x)), dtype=np.float64)
+    exponent = _portable_exp(-np.asarray(x, dtype=np.float64))
+    return np.asarray(1.0 / (1.0 + exponent), dtype=np.float64)
 
 
 def _base_provenance(*, include_mediator: bool) -> dict[str, ColumnProvenance]:
@@ -321,7 +354,8 @@ def make_synthetic_bias_cohort(n: int = 4_000, seed: int = 42) -> CohortBundle:
         + 0.85 * u_subclinical
         + rng.normal(0.0, 0.75, size=n)
     )
-    log_crp_z = (raw_crp - raw_crp.mean()) / raw_crp.std(ddof=0)
+    crp_mean, crp_std = _portable_mean_std(raw_crp)
+    log_crp_z = (raw_crp - crp_mean) / crp_std
 
     beta_true = math.log(1.20)
     eta_conf = (
@@ -333,8 +367,8 @@ def make_synthetic_bias_cohort(n: int = 4_000, seed: int = 42) -> CohortBundle:
         + 0.002 * (total_chol_true - 200.0)
         - 0.008 * (hdl_chol_true - 52.0)
     )
-    rate_acute = 0.0022 * np.exp(beta_true * log_crp_z + eta_conf + 1.50 * u_subclinical)
-    rate_chronic = 0.0034 * np.exp(beta_true * log_crp_z + eta_conf)
+    rate_acute = 0.0022 * _portable_exp(beta_true * log_crp_z + eta_conf + 1.50 * u_subclinical)
+    rate_chronic = 0.0034 * _portable_exp(beta_true * log_crp_z + eta_conf)
 
     exp_rv = rng.exponential(1.0, size=n)
     h1 = 12.0 * rate_acute

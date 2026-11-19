@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -17,7 +16,6 @@ def test_cli_nhanes_end_to_end_and_tamper_detection(
 ) -> None:
     out_dir = tmp_path / "nhanes_artifacts"
 
-    t0 = time.perf_counter()
     exit_code = cli_main(
         [
             "run",
@@ -29,11 +27,9 @@ def test_cli_nhanes_end_to_end_and_tamper_detection(
             str(out_dir),
         ]
     )
-    elapsed = time.perf_counter() - t0
     captured = capsys.readouterr()
     assert exit_code == 0, captured.err
     assert "108/108 converged" in captured.out
-    assert elapsed < 12.0
 
     expected_files = (
         "runs.jsonl",

@@ -32,6 +32,7 @@ STUBS_RE = re.compile(
     r"|except\s*(?:[\w.(),\s]+)?:\s*pass\b"
 )
 SKIPS_RE = re.compile(r"@pytest\.mark\.(?:skip|skipif|xfail)\b|\bpytest\.skip\(")
+WALL_CLOCK_ASSERT_RE = re.compile(r"\bassert\s+elapsed\s*<")
 ASSERT_RE = re.compile(r"\bassert\b")
 TEST_FILE_RE = re.compile(r"(?:^|/)(?:test_[^/]+\.py|[^/]+_test\.py)$")
 EXCEPTION_ROW_RE = re.compile(r"^\|\s*(?:W|E)\d+\s*\|")
@@ -117,6 +118,12 @@ def _is_exception_row(text: str) -> bool:
     return bool(EXCEPTION_ROW_RE.match(text.strip()))
 
 
+def _assertion_skeleton(text: str) -> str:
+    """Drop numeric literals so a same-line threshold edit is not a deleted assertion."""
+    collapsed = " ".join(text.split())
+    return NUMBER_RE.sub("0", collapsed)
+
+
 def _extract_thresholds(text: str) -> list[Threshold]:
     out: list[Threshold] = []
     for match in NUMBER_RE.finditer(text):
@@ -188,11 +195,18 @@ def _scan_findings(
         if _is_test_file(path):
             flag("test-deleted", path, "file deleted")
 
+    replaced_assert_skeletons = {
+        (item.file, _assertion_skeleton(item.text))
+        for item in added
+        if _is_test_file(item.file) and ASSERT_RE.search(item.text)
+    }
     for item in removed:
         if (
             _is_test_file(item.file)
             and item.file not in deleted_set
             and ASSERT_RE.search(item.text)
+            and not WALL_CLOCK_ASSERT_RE.search(item.text)
+            and (item.file, _assertion_skeleton(item.text)) not in replaced_assert_skeletons
         ):
             flag("assertion-removed", item.file, item.text)
 

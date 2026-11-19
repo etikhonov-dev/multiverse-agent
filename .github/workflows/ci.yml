@@ -55,7 +55,7 @@ jobs:
       - name: Run full test suite with >=90% coverage floor
         run: uv run pytest --cov=multiverse_agent --cov-fail-under=90
 
-      - name: Smoke test 108-branch NHANES CLI run & verification (<12s budget)
+      - name: Smoke test 108-branch NHANES CLI run & verification
         run: |
           uv run multiverse-agent run --cohort nhanes --backend replay --out /tmp/ci-nhanes
           uv run multiverse-agent verify \

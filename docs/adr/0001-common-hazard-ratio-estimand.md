@@ -26,5 +26,5 @@ Additionally, fitting missing-value imputers (`IterativeImputer`, medians) *afte
 ## Consequences
 
 - All three estimators agree within `atol = 0.04` on `log_hr` under mid-interval censoring and zero-event tail intervals.
-- Baseline design caching yields a ~6x speedup, keeping 108-branch real NHANES execution under `10s` single-core CPU.
+- Baseline design caching yields a ~6x speedup, keeping 108-branch real NHANES execution under `10s` on a developer CPU. GitHub-hosted runners are slower, so CI checks convergence and artifacts without a wall-clock bound.
 - Exact Owen (2014) Sobol-Shapley attribution cleanly separates genuine estimator sensitivity (`0.2%` on NHANES) from epidemiological design drivers (`cohort_definition` `56.9%`, `washout_months` `34.1%`).
